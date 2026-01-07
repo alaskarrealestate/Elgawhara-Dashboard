@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>خريطة البلكات التفاعلية - مجموعة العسكر</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+
+<style>
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Arial;
+  background: #f0f2f5;
+}
+
+/* الحاوية */
+#container {
+  display: flex;
+  height: 100vh;
+  flex-direction: row-reverse; /* لوحة البحث على اليمين */
+}
+
+/* الخريطة */
+#map {
+  flex: 1;
+  min-height: 300px;
+}
+
+/* الشريط الجانبي */
+#sidebar {
+  width: 360px;
+  background: linear-gradient(180deg, #ffffff, #f7f9fb); /* خلفية احترافية متدرجة */
+  padding: 20px;
+  box-shadow: -3px 0 18px rgba(0,0,0,0.25);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  border-left: 2px solid #e0e0e0;
+}
+
+/* شعارات */
+#topLogo, #bottomLogo {
+  width: 100%;
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+#topLogo img, #bottomLogo img {
+  max-width: 80%;
+  height: auto;
+}
+
+/* العناوين */
+.title {
+  font-weight: bold;
+  margin-bottom: 12px;
+  color: #1c1f26;
+  font-size: 20px;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+/* القطاعات */
+.sectors {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 15px;
+}
+
+.sector-btn {
+  flex: 1;
+  margin: 5px;
+  padding: 12px;
+  text-align: center;
+  border-radius: 10px;
+  cursor: pointer;
+  background: #e1e4e8;
+  font-weight: bold;
+  font-size: 16px;
+  color: #1c1f26;
+  transition: 0.3s;
+}
+
+.sector-btn:hover {
+  background: #cfd8dc;
+}
+
+.sector-btn.active {
+  background: #1565c0;
+  color: #fff;
+}
+
+/* اختيار البلك */
+select {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  margin-bottom: 15px;
+  transition: 0.3s;
+  background: #f9f9f9;
+  cursor: pointer;
+}
+
+select option {
+  transition: all 0.3s;
+}
+
+select option:hover, select option.focused {
+  background: #1565c0;
+  color: #fff;
+  font-size: 17px;
+}
+
+/* لوحة الإحصائيات */
+.stats {
+  margin-top: 15px;
+  background: #f3f6f9;
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.stat {
+  margin: 10px 0;
+  font-size: 17px;
+}
+
+/* Tooltip */
+.leaflet-tooltip.custom-tooltip {
+  background: #263238;
+  color: #fff;
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 13px;
+}
+
+/* دعم الجوال */
+@media (max-width: 768px) {
+  #container {
+    flex-direction: column-reverse;
+  }
+  #sidebar {
+    width: 100%;
+    box-shadow: 0 -3px 12px rgba(0,0,0,0.2);
+    max-height: 50vh;
+    border-left: none;
+    border-top: 2px solid #e0e0e0;
+  }
+  .sectors {
+    flex-direction: column;
+  }
+  .sector-btn {
+    margin: 4px 0;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div id="container">
+
+  <div id="sidebar">
+
+    <!-- شعار مجموعة العسكر أعلى الصفحة -->
+    <div id="topLogo">
+      <img src="logo_alsakar.png" alt="مجموعة العسكر">
+    </div>
+
+    <div class="title">القطاعات</div>
+    <div class="sectors">
+      <div class="sector-btn" data-sector="B">B</div>
+      <div class="sector-btn" data-sector="G">G</div>
+      <div class="sector-btn" data-sector="D">D</div>
+    </div>
+
+    <div class="title">رقم البلك</div>
+    <select id="blockSelect">
+      <option value="">كل البلكات</option>
+    </select>
+
+    <div class="stats">
+      <div class="title">لوحة الإحصائيات</div>
+      <div class="stat" id="stat1"></div>
+      <div class="stat" id="stat2"></div>
+      <div class="stat" id="stat3"></div>
+      <div class="stat" id="stat4"></div>
+      <div class="stat" id="stat5"></div>
+    </div>
+
+    <!-- شعار مخطط الجوهرة أسفل الصفحة -->
+    <div id="bottomLogo">
+      <img src="logo_jawhara.png" alt="مخطط الجوهرة">
+    </div>
+
+  </div>
+
+  <div id="map"></div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script>
+const AR = {
+  usage: {
+    residential: 'سكني',
+    commercial: 'تجاري',
+    undefined: 'غير محدد'
+  }
+};
+
+function usageColor(u) {
+  if(!u) return '#999999';
+  return u === 'commercial' ? '#c62828' : '#1565c0';
+}
+
+function formatNumber(n) {
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/* خريطة SATELLITE */
+const map = L.map('map').setView([24.17556, 47.27167], 15);
+L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { attribution: '© Esri' }
+).addTo(map);
+
+let allMarkers = [];
+let currentSector = null;
+let selectedBlock = null;
+
+const blockSelect = document.getElementById('blockSelect');
+
+Papa.parse('plots.csv', {
+  download: true,
+  header: true,
+  complete: res => {
+    res.data.forEach(row => {
+      const lat = parseFloat(row.lat);
+      const lng = parseFloat(row.lng);
+      if (!lat || !lng) return;
+
+      const usageType = row.usage || 'undefined';
+      const color = usageColor(usageType);
+
+      const marker = L.circleMarker([lat, lng], {
+        radius: 7,
+        color,
+        weight: 2,
+        fillColor: color,
+        fillOpacity: 0.9
+      });
+
+      marker.bindTooltip(`
+        <b>القطاع:</b> ${row.sector}<br>
+        <b>رقم البلك:</b> ${row.block}<br>
+        <b>النوع:</b> ${AR.usage[usageType]}<br>
+        <b>المساحة:</b> ${formatNumber(row.area)} م²<br>
+        <b>عدد القطع:</b> ${row.plots_count}
+      `, { sticky: true, className: 'custom-tooltip' });
+
+      marker.addTo(map);
+      allMarkers.push({ marker, data: {...row, usage: usageType} });
+    });
+
+    refreshUI();
+  }
+});
+
+function refreshUI(blockValue = null) {
+  let filtered = allMarkers.filter(o =>
+    (!currentSector || o.data.sector === currentSector) &&
+    (!blockValue || o.data.block === blockValue)
+  );
+
+  allMarkers.forEach(o =>
+    filtered.includes(o) ? o.marker.addTo(map) : map.removeLayer(o.marker)
+  );
+
+  // تحديث قائمة البلكات
+  if (!blockValue) {
+    blockSelect.innerHTML = '<option value="">كل البلكات</option>';
+    [...new Set(filtered.map(o => o.data.block))].forEach(b => {
+      blockSelect.innerHTML += `<option value="${b}">${b}</option>`;
+    });
+  }
+
+  // تحديث لوحة الإحصائيات
+  if (blockValue && filtered[0]) {
+    const d = filtered[0].data;
+    stat1.innerHTML = `<b>القطاع:</b> ${d.sector}`;
+    stat2.innerHTML = `<b>رقم البلك:</b> ${d.block}`;
+    stat3.innerHTML = `<b>النوع:</b> ${AR.usage[d.usage]}`;
+    stat4.innerHTML = `<b>المساحة:</b> ${formatNumber(d.area)} م²`;
+    stat5.innerHTML = `<b>عدد القطع:</b> ${d.plots_count}`;
+  } else {
+    const totalArea = filtered.reduce((s,o)=>s+Number(o.data.area),0);
+    stat1.innerHTML = `<b>عدد البلكات:</b> ${filtered.length}`;
+    stat2.innerHTML = `<b>إجمالي المساحة:</b> ${formatNumber(totalArea)} م²`;
+    stat3.innerHTML = '';
+    stat4.innerHTML = '';
+    stat5.innerHTML = '';
+  }
+
+  highlightOption(blockValue);
+}
+
+// تظليل وتكبير الرقم عند Hover
+function highlightOption(value) {
+  const options = blockSelect.querySelectorAll('option');
+  options.forEach(opt => {
+    opt.classList.remove('focused');
+  });
+  if(value){
+    const selectedOpt = Array.from(options).find(o=>o.value===value);
+    if(selectedOpt) selectedOpt.classList.add('focused');
+  }
+}
+
+/* أزرار القطاعات */
+document.querySelectorAll('.sector-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.sector-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentSector = btn.dataset.sector;
+    selectedBlock = null;
+    refreshUI();
+  };
+});
+
+/* اختيار البلك */
+blockSelect.onchange = e => {
+  selectedBlock = e.target.value || null;
+  refreshUI(selectedBlock);
+};
+</script>
+
+</body>
+</html>
